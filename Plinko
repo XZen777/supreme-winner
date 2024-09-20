@@ -1,0 +1,173 @@
+-- Load Fluent Library
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+
+-- Wait for the game to load completely
+repeat task.wait(0.25) until game:IsLoaded();
+
+-- Set up global variables for use
+getgenv().Image = "rbxassetid://7229442422"; -- Replace with your asset ID
+getgenv().ToggleUI = Enum.KeyCode.E -- Change this to whatever key you want to toggle the UI
+
+-- Create the OpenUI for Mobile Interface
+task.spawn(function()
+    if not getgenv().LoadedMobileUI then 
+        getgenv().LoadedMobileUI = true
+        
+        local OpenUI = Instance.new("ScreenGui")
+        local ImageButton = Instance.new("ImageButton")
+        local UICorner = Instance.new("UICorner")
+
+        OpenUI.Name = "OpenUI"
+        OpenUI.Parent = game:GetService("CoreGui")
+        OpenUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+        ImageButton.Parent = OpenUI
+        ImageButton.BackgroundColor3 = Color3.fromRGB(105, 105, 105)
+        ImageButton.BackgroundTransparency = 0.8
+        ImageButton.Position = UDim2.new(0.9, 0, 0.1, 0)
+        ImageButton.Size = UDim2.new(0, 50, 0, 50)
+        ImageButton.Image = getgenv().Image
+        ImageButton.Draggable = true
+        ImageButton.Transparency = 1 -- Set transparency at UI level
+
+        UICorner.CornerRadius = UDim.new(0, 200) -- Make it circular
+        UICorner.Parent = ImageButton
+        
+        -- Connect click event to simulate key press for toggling the UI
+        ImageButton.MouseButton1Click:Connect(function()
+            game:GetService("VirtualInputManager"):SendKeyEvent(true, getgenv().ToggleUI, false, game)
+        end)
+    end
+end)
+
+-- Create the main window using Fluent
+local Window = Fluent:CreateWindow({
+    Title = "Plinko " .. Fluent.Version,
+    SubTitle = "Astral",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(580, 460),
+    Acrylic = true,
+    Theme = "Dark",
+    MinimizeKey = Enum.KeyCode.E -- Used when there's no MinimizeKeybind
+})
+
+-- Functionality for toggling the UI visibility
+local isVisible = true
+
+local function toggleUI()
+    isVisible = not isVisible
+    Window:SetVisible(isVisible)
+end
+
+-- Listen for input to toggle the UI via keyboard and button click
+game:GetService("UserInputService").InputBegan:Connect(function(input, gameProcessedEvent)
+    if not gameProcessedEvent then -- Make sure the event isn't processed by other GUI elements
+        if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == getgenv().ToggleUI then
+            toggleUI()
+        end
+    end
+end)
+
+-- Setup remote events and variables for functionality
+local replicatedStorage = game:GetService("ReplicatedStorage")
+
+-- Toggle for enabling/disabling Subtract functionality 
+local Tabs = {
+    Main = Window:AddTab({ Title = "Farm", Icon = "" }),
+    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
+}
+
+local Options = Fluent.Options
+
+-- Toggle to subtract (first toggle)
+local ToggleSubtractMoney = Tabs.Main:AddToggle("ToggleSubtract", {Title = "AutoDrop (Balls not visible on board)", Default = false })
+
+ToggleSubtractMoney:OnChanged(function()
+    if Options.ToggleSubtract.Value then
+        local args = {
+            [1] = 1,
+            [2] = false,
+            [3] = false
+        }
+        
+        replicatedStorage.Subtract:FireServer(unpack(args)) -- Fire Subtract remote event when toggled on 
+    end 
+end)
+
+-- Toggle for giving money (second toggle)
+local ToggleGiveMoney = Tabs.Main:AddToggle("ToggleGiveMoney", {Title = "Enable Give Money", Default = false })
+
+-- Slider for money amount adjustment 
+local MoneySliderValue 
+
+local MoneySlider = Tabs.Main:AddSlider("MoneySlider", {
+    Title = "Money Value",
+    Description = "Adjust the cash amount to give.",
+    Default = 50000000000000000,
+    Min = 1,
+    Max = 1000000000000000000,
+    Rounding = 0,
+})
+
+MoneySlider:OnChanged(function(Value)
+    MoneySliderValue= Value -- Update money slider value with selected value
+    
+    if Options.ToggleGiveMoney.Value then -- Ensure that we only fire when enabled 
+        local args= {
+            [1] = {
+                ["Cash"] = MoneySliderValue -- Use value from slider 
+            }
+        }
+
+        replicatedStorage.Add:FireServer(unpack(args)) -- Fire Add remote event when toggled on 
+    end 
+end)
+
+ToggleGiveMoney:OnChanged(function()
+   if Options.ToggleGiveMoney.Value then           
+       local args= {
+           [1]={
+               ["Cash"]= MoneySliderValue -- Use current slider value when giving money 
+           }
+       }
+       
+       replicatedStorage.Add:FireServer(unpack(args)) -- Fire Add remote event when toggled on 
+   end 
+end)
+
+-- Auto Prestige Toggle 
+local ToggleAutoPrestige= Tabs.Main:AddToggle("AutoPrestige", {Title= "Auto Prestige", Default= false})
+
+ToggleAutoPrestige:OnChanged(function()
+   if Options.AutoPrestige.Value then        
+      while Options.AutoPrestige.Value do        
+          local args= {
+              [1]= 1 -- Fixed prestige value since no slider exists now.
+          }
+          
+          replicatedStorage.Prestige:FireServer(unpack(args)) -- Fire Prestige remote event continuously      
+          wait(1) -- Add a wait time between each prestige call to avoid spamming 
+      end      
+   end 
+end)
+
+Window:SelectTab(1)
+
+Fluent:Notify({
+    Title= "Fluent",
+    Content= "The script has been loaded.",
+    Duration= 8
+})
+
+SaveManager:SetLibrary(Fluent)
+InterfaceManager:SetLibrary(Fluent)
+SaveManager:IgnoreThemeSettings()
+SaveManager:SetIgnoreIndexes({})
+InterfaceManager:SetFolder("FluentScriptHub")
+SaveManager:SetFolder("FluentScriptHub/specific-game")
+
+InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+SaveManager:BuildConfigSection(Tabs.Settings)
+
+-- Load auto configurations (if any)
+SaveManager:LoadAutoloadConfig()
